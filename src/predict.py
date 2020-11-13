@@ -79,7 +79,7 @@ class CaptchaPred:
             shuffle=False,
         )
         lbl_enc = joblib.load("../input/pickles/lbl_encoder.pkl")
-        model = CaptchaModel(36)
+        model = CaptchaModel(lbl_enc.classes_)
         model.load_state_dict(torch.load("../input/pickles/captcha.pth"))
 
         test_preds = []

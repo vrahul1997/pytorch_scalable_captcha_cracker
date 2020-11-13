@@ -53,12 +53,12 @@ def decode_predictions(preds, encoder):
                 temp.append(p)
         tp = "".join(temp).replace("§", "")
         cap_preds.append(remove_duplicates(tp))
-    return cap_preds
+    return cap_preds    
 
 
 def run_training():
     # image_files
-    image_files = glob.glob("../input/all_captchas/*.png")
+    image_files = glob.glob("../input/train_all_captchas/*.png")
     print(image_files[:4])
 
     # targets
@@ -119,9 +119,6 @@ def run_training():
         shuffle=False,
     )
 
-    # for data in train_dataloader:
-    #     print(data)
-
     model = CaptchaModel(num_chars=len(lbl_encoder.classes_))
     model.to(config.DEVICE)
 
@@ -137,15 +134,15 @@ def run_training():
             current_preds = decode_predictions(vp, lbl_encoder)
             valid_captcha_preds.extend(current_preds)
         combined = list(zip(test_target_orig, valid_captcha_preds))
-        print(combined[:10])
+        print(combined[:20])
         test_dup_rem = [remove_duplicates(c) for c in test_target_orig]
         accuracy = metrics.accuracy_score(test_dup_rem, valid_captcha_preds)
         print(
             f"Epoch={epoch}, Train Loss={train_loss}, Test Loss={valid_loss} Accuracy={accuracy}"
         )
         scheduler.step(valid_loss)
-        joblib.dump(lbl_encoder, "../input/pickles/lbl_encoder.pkl")
-        torch.save(model.state_dict(), "../input/pickles/captcha.pth")
+        joblib.dump(lbl_encoder, "../input/pickles/tan_pan_oltas_gst_epfo_rc_lbl_encoder.pkl")
+        torch.save(model.state_dict(), "../input/pickles/tan_pan_oltas_gst_epfo_rc_model.pth")
 
 
 

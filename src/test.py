@@ -51,8 +51,11 @@ def decode_predictions(preds, encoder):
         cap_preds.append(remove_duplicates(tp))
     return cap_preds
 
-def run_test():
-    image_files = sorted(glob.glob("../input/all_test/*.png"))[200:]
+
+def run_test(u, v):
+    image_files = sorted(
+        glob.glob("../input/all_captcha_types/mca_captcha/test_images/*.png")
+    )[u:v]
     print(image_files[:5])
 
     test_dataset = dataset.ClassificationDataset(
@@ -62,20 +65,24 @@ def run_test():
 
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
-        batch_size = config.BATCH_SIZE,
+        batch_size=config.BATCH_SIZE,
         num_workers=config.NUM_WORKERS,
         shuffle=False,
     )
-    lbl_enc = joblib.load("../input/pickles/lbl_encoder.pkl")
+    lbl_enc = joblib.load("../input/pickles/tan_pan_oltas_gst_epfo_rc_lbl_encoder.pkl")
     model = CaptchaModel(len(lbl_enc.classes_))
-    model.load_state_dict(torch.load("../input/pickles/captcha.pth"))
+
+    model.load_state_dict(
+        torch.load("../src/lightning_logs/version_3/checkpoints/epoch=86.ckpt")[
+            "state_dict"
+        ]
+    )
 
     test_preds = []
     for data in test_loader:
         model.eval()
         batch_preds, _ = model(**data)
         test_preds.append(batch_preds)
-    
 
     all_preds = []
     for test_data in test_preds:
@@ -83,10 +90,24 @@ def run_test():
         for i in current_preds:
             all_preds.append(i)
     print(all_preds)
+    return all_preds
     # df = pd.read_csv("../input/test_images_outputs.csv")
     # df['pytorch_preds'] = all_preds
     # df.to_csv("../input/comparison.csv")
     # print(len(df[df['Captcha Value'] != df['pytorch_preds']]['Captcha Value']))
 
+
 if __name__ == "__main__":
-    run_test()
+    final_preds_mca = []
+    frst_250 = run_test(0, 100)
+    final_preds_mca.append(frst_250)
+    # second_250 = run_test(250, 500)
+    # final_preds_mca.append(second_250)
+    final_preds_mca = [item for sublists in final_preds_mca for item in sublists]
+    images = sorted(
+        glob.glob("../input/all_captcha_types/mca_captcha/test_images/*.png")
+    )
+    inputs = [i.split("/")[-1].split(".")[0] for i in images]
+    df = pd.DataFrame(data=zip(inputs, final_preds_mca), columns=["values", "preds"])
+    df.to_csv("preds_mca.csv", index=False)
+    print(df)

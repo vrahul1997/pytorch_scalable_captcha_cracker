@@ -1,11 +1,20 @@
-import torch
-from torch import nn
-from torch.nn import functional as F
 import pytorch_lightning as pl
+import os
+from numpy.lib.shape_base import split
+from sklearn import metrics
+from sklearn import preprocessing, model_selection
+import glob
+import torch
+import pandas as pd
+import io
+import numpy as np
+import torch.nn as nn
+import joblib
+from PIL import Image
 
 
-class CaptchaModel(nn.Module):
-    def __init__(self, num_chars):
+class CaptchaModel(pl.LightningModule):
+    def __init__(self, num_classes):
         super(CaptchaModel, self).__init__()
 
         self.conv_1 = nn.Conv2d(3, 128, kernel_size=(3, 3), padding=(1, 1))
@@ -20,7 +29,7 @@ class CaptchaModel(nn.Module):
         self.gru = nn.GRU(
             64, 32, bidirectional=True, num_layers=2, dropout=0.25, batch_first=True
         )
-        self.output = nn.Linear(64, num_chars + 1)
+        self.output = nn.Linear(64, num_classes + 1)
 
     def forward(self, images, targets=None):
         bs, ch, ht, wd = images.size()
@@ -57,7 +66,7 @@ class CaptchaModel(nn.Module):
             # it takes log softmax values.
             log_softmax_values = F.log_softmax(
                 x, 2
-            )  # (x, 2) indicates, x th second index which is num_chars + 1
+            )  # (x, 2) indicates, x th second index which is num_classes + 1
 
             # Two things have to specified here, length of inputs and len of outputs
             input_lengths = torch.full(
@@ -75,3 +84,14 @@ class CaptchaModel(nn.Module):
             return x, loss
 
         return x, None
+
+
+lbl_enc = joblib.load(
+    "../input/pickles/tan_pan_oltas_gst_epfo_lbl_encoder.pkl")
+model = CaptchaModel(num_classes=len(lbl_enc.classes_))
+model = model.load_from_checkpoint(
+    "../src/lightning_logs/version_0/checkpoints/epoch=105.ckpt", num_classes=len(lbl_enc.classes_))
+
+
+trainer = pl.Trainer(gpus=1, max_epochs=200)
+trainer.test(model, )
