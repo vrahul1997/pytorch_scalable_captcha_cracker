@@ -15,8 +15,7 @@ import dataset
 from models import CaptchaModel
 
 BASE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "input"
-)
+    os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "input")
 
 # image_files
 image_files = glob.glob("../input/train_all_captchas/*.png")
@@ -44,7 +43,8 @@ enc_targets = np.array(enc_targets) + 1
 print(len(enc_targets))
 print(len(lbl_encoder.classes_))
 
-joblib.dump(lbl_encoder, "../input/pickles/tan_pan_oltas_gst_epfo_rc_lbl_encoder.pkl")
+joblib.dump(lbl_encoder,
+            "../input/pickles/tan_pan_oltas_gst_epfo_rc_lbl_encoder.pkl")
 
 (
     train_imgs,
@@ -53,13 +53,14 @@ joblib.dump(lbl_encoder, "../input/pickles/tan_pan_oltas_gst_epfo_rc_lbl_encoder
     test_target_orig,
     train_targets,
     test_targets,
-) = model_selection.train_test_split(
-    image_files, targets_orig, enc_targets, test_size=0.1, random_state=42
-)
+) = model_selection.train_test_split(image_files,
+                                     targets_orig,
+                                     enc_targets,
+                                     test_size=0.1,
+                                     random_state=42)
 
 print(len(train_imgs), len(train_targets))
 print(len(test_imgs), len(test_targets))
-
 
 train_dataset = dataset.ClassificationDataset(
     image_paths=train_imgs,
@@ -77,7 +78,7 @@ test_dataset = dataset.ClassificationDataset(
     image_paths=single_test_file,
     resize=(config.IMAGE_HEIGHT, config.IMAGE_WIDTH),
 )
-    
+
 
 def remove_duplicates(x):
     if len(x) < 2:
@@ -146,9 +147,12 @@ class CaptchaModel(pl.LightningModule):
         self.linear_1 = nn.Linear(1024, 64)
         self.drop_1 = nn.Dropout(0.2)
 
-        self.gru = nn.GRU(
-            64, 32, bidirectional=True, num_layers=2, dropout=0.25, batch_first=True
-        )
+        self.gru = nn.GRU(64,
+                          32,
+                          bidirectional=True,
+                          num_layers=2,
+                          dropout=0.25,
+                          batch_first=True)
         self.output = nn.Linear(64, num_classes + 1)
 
     def forward(self, images, targets=None):
@@ -189,17 +193,16 @@ class CaptchaModel(pl.LightningModule):
             )  # (x, 2) indicates, x th second index which is num_chars + 1
 
             # Two things have to specified here, length of inputs and len of outputs
-            input_lengths = torch.full(
-                size=(bs,), fill_value=log_softmax_values.size(0), dtype=torch.int32
-            )
+            input_lengths = torch.full(size=(bs, ),
+                                       fill_value=log_softmax_values.size(0),
+                                       dtype=torch.int32)
             # print(input_lengths)
-            targets_lengths = torch.full(
-                size=(bs,), fill_value=targets.size(1), dtype=torch.int32
-            )
+            targets_lengths = torch.full(size=(bs, ),
+                                         fill_value=targets.size(1),
+                                         dtype=torch.int32)
             # print(targets_lengths)
-            loss = nn.CTCLoss(blank=0)(
-                log_softmax_values, targets, input_lengths, targets_lengths
-            )
+            loss = nn.CTCLoss(blank=0)(log_softmax_values, targets,
+                                       input_lengths, targets_lengths)
 
             return x, loss
 
@@ -239,7 +242,8 @@ class CaptchaModel(pl.LightningModule):
         return {"loss": loss, "logits": logits}
 
     def validation_epoch_end(self, val_step_outputs):
-        avg_val_loss = torch.tensor([x["loss"] for x in val_step_outputs]).mean()
+        avg_val_loss = torch.tensor([x["loss"]
+                                     for x in val_step_outputs]).mean()
         logits = [x["logits"] for x in val_step_outputs]
         valid_captcha_preds = []
         for vp in logits:
@@ -276,7 +280,9 @@ class CaptchaModel(pl.LightningModule):
         return self.fin_res
 
 
-trainer = pl.Trainer(gpus=1, max_epochs=200, resume_from_checkpoint=model_chkpoint)
+trainer = pl.Trainer(gpus=1,
+                     max_epochs=200,
+                     resume_from_checkpoint=model_chkpoint)
 model = CaptchaModel(
     num_classes=len(lbl_encoder.classes_),
     train_dataset=train_dataset,
