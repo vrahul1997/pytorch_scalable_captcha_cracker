@@ -23,22 +23,20 @@ lbl_encoder = joblib.load(
 
 
 def remove_duplicates(x):
-    if len(x) < 2:
-        return x
-    fin = ""
-    for j in x:
-        if fin == "":
-            fin = j
-        else:
-            if j == fin[-1]:
-                continue
-            else:
-                fin = fin + j
-    try:
-        fin = fin.replace("#", "")
-    except Exception as e:
-        pass
-    return fin
+    letter = None
+    word = []
+    for i in x:
+        if i == "$":
+            letter = None
+        if i != "$" and i != letter:
+            letter = None
+        if i != "$" and letter is None:
+            letter = i
+            word.append(i)
+        if i != "$" and letter is not None:
+            pass
+    word = "".join(word)
+    return word
 
 
 def decode_predictions(preds, encoder):

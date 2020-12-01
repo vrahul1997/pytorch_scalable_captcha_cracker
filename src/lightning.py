@@ -1,27 +1,23 @@
 import glob
 import os
 
+import joblib
 import numpy as np
 import pytorch_lightning as pl
 import torch
-import joblib
 import torch.nn as nn
 import torch.nn.functional as F
-from pytorch_lightning.metrics.functional import accuracy
 from sklearn import model_selection, preprocessing
 
-import config
+import mca_config as config
 import dataset
-from models import CaptchaModel
-
-BASE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "input")
 
 # image_files
-image_files = glob.glob("../input/train_all_captchas/*.png")
+image_files = glob.glob("../input/all_captcha_types/mca_captcha/train_images/*.png")
 single_test_file = glob.glob("../input/single_test/*.png")
-model_chkpoint = "../src/lightning_logs/version_3/checkpoints/epoch=86.ckpt"
-print(image_files[:4])
+model_chkpoint = "../src/lightning_logs/version_5/checkpoints/epoch=71.ckpt"
+lbl_encoder_chkpoint = "../input/pickles/mca_encoder.pkl"
+print(single_test_file)
 
 # targets
 targets_orig = [i.split("/")[-1][:-4] for i in image_files]
@@ -43,8 +39,7 @@ enc_targets = np.array(enc_targets) + 1
 print(len(enc_targets))
 print(len(lbl_encoder.classes_))
 
-joblib.dump(lbl_encoder,
-            "../input/pickles/tan_pan_oltas_gst_epfo_rc_lbl_encoder.pkl")
+joblib.dump(lbl_encoder, lbl_encoder_chkpoint)
 
 (
     train_imgs,
@@ -53,11 +48,9 @@ joblib.dump(lbl_encoder,
     test_target_orig,
     train_targets,
     test_targets,
-) = model_selection.train_test_split(image_files,
-                                     targets_orig,
-                                     enc_targets,
-                                     test_size=0.1,
-                                     random_state=42)
+) = model_selection.train_test_split(
+    image_files, targets_orig, enc_targets, test_size=0.1, random_state=42
+)
 
 print(len(train_imgs), len(train_targets))
 print(len(test_imgs), len(test_targets))
@@ -78,25 +71,23 @@ test_dataset = dataset.ClassificationDataset(
     image_paths=single_test_file,
     resize=(config.IMAGE_HEIGHT, config.IMAGE_WIDTH),
 )
-
+    
 
 def remove_duplicates(x):
-    if len(x) < 2:
-        return x
-    fin = ""
-    for j in x:
-        if fin == "":
-            fin = j
-        else:
-            if j == fin[-1]:
-                continue
-            else:
-                fin = fin + j
-    try:
-        fin = fin.replace("#", "")
-    except Exception as e:
-        pass
-    return fin
+    letter = None
+    word = []
+    for i in x:
+        if i == "$":
+            letter = None
+        if i != "$" and i != letter:
+            letter = None
+        if i != "$" and letter is None:
+            letter = i
+            word.append(i)
+        if i != "$" and letter is not None:
+            pass
+    word = "".join(word)
+    return word
 
 
 def decode_predictions(preds, encoder):
@@ -104,19 +95,21 @@ def decode_predictions(preds, encoder):
     preds = torch.softmax(preds, 2)
     preds = torch.argmax(preds, 2)
     preds = preds.detach().cpu().numpy()
+    exact_preds = []
     cap_preds = []
     for j in range(preds.shape[0]):
         temp = []
         for k in preds[j, :]:
             k = k - 1
             if k == -1:
-                temp.append("§")
+                temp.append("$")
             else:
                 p = encoder.inverse_transform([k])[0]
                 temp.append(p)
-        tp = "".join(temp).replace("§", "")
+        tp = "".join(temp).replace("#", "$")
+        exact_preds.append(tp)
         cap_preds.append(remove_duplicates(tp))
-    return cap_preds
+    return cap_preds, exact_preds
 
 
 class CaptchaModel(pl.LightningModule):
@@ -128,7 +121,6 @@ class CaptchaModel(pl.LightningModule):
         test_dataset=None,
         test_targets_orig=None,
         lbl_encoder=None,
-        single_test_file=None,
     ):
         super(CaptchaModel, self).__init__()
 
@@ -144,15 +136,12 @@ class CaptchaModel(pl.LightningModule):
         self.conv_2 = nn.Conv2d(128, 64, kernel_size=(3, 3), padding=(1, 1))
         self.max_pool2 = nn.MaxPool2d(kernel_size=(2, 2))
 
-        self.linear_1 = nn.Linear(1024, 64)
+        self.linear_1 = nn.Linear(config.LAST_LINEAR, 64)
         self.drop_1 = nn.Dropout(0.2)
 
-        self.gru = nn.GRU(64,
-                          32,
-                          bidirectional=True,
-                          num_layers=2,
-                          dropout=0.25,
-                          batch_first=True)
+        self.gru = nn.GRU(
+            64, 32, num_layers=2, bidirectional=True, dropout=0.25, batch_first=True
+        )
         self.output = nn.Linear(64, num_classes + 1)
 
     def forward(self, images, targets=None):
@@ -193,16 +182,17 @@ class CaptchaModel(pl.LightningModule):
             )  # (x, 2) indicates, x th second index which is num_chars + 1
 
             # Two things have to specified here, length of inputs and len of outputs
-            input_lengths = torch.full(size=(bs, ),
-                                       fill_value=log_softmax_values.size(0),
-                                       dtype=torch.int32)
+            input_lengths = torch.full(
+                size=(bs,), fill_value=log_softmax_values.size(0), dtype=torch.int32
+            )
             # print(input_lengths)
-            targets_lengths = torch.full(size=(bs, ),
-                                         fill_value=targets.size(1),
-                                         dtype=torch.int32)
+            targets_lengths = torch.full(
+                size=(bs,), fill_value=targets.size(1), dtype=torch.int32
+            )
             # print(targets_lengths)
-            loss = nn.CTCLoss(blank=0)(log_softmax_values, targets,
-                                       input_lengths, targets_lengths)
+            loss = nn.CTCLoss(blank=0)(
+                log_softmax_values, targets, input_lengths, targets_lengths
+            )
 
             return x, loss
 
@@ -242,13 +232,14 @@ class CaptchaModel(pl.LightningModule):
         return {"loss": loss, "logits": logits}
 
     def validation_epoch_end(self, val_step_outputs):
-        avg_val_loss = torch.tensor([x["loss"]
-                                     for x in val_step_outputs]).mean()
+        avg_val_loss = torch.tensor([x["loss"] for x in val_step_outputs]).mean()
         logits = [x["logits"] for x in val_step_outputs]
         valid_captcha_preds = []
+        exact_preds = []
         for vp in logits:
-            current_preds = decode_predictions(vp, self.lbl_encoder)
+            current_preds, act_preds = decode_predictions(vp, self.lbl_encoder)
             valid_captcha_preds.extend(current_preds)
+            exact_preds.extend(act_preds)
         combined = list(zip(self.test_targets_orig, valid_captcha_preds))
         print(combined[:20])
         pbar = {"val_loss": avg_val_loss}
@@ -280,9 +271,9 @@ class CaptchaModel(pl.LightningModule):
         return self.fin_res
 
 
-trainer = pl.Trainer(gpus=1,
-                     max_epochs=200,
-                     resume_from_checkpoint=model_chkpoint)
+trainer = pl.Trainer(gpus=1, max_epochs=2000,
+                     resume_from_checkpoint=model_chkpoint
+                     )
 model = CaptchaModel(
     num_classes=len(lbl_encoder.classes_),
     train_dataset=train_dataset,
