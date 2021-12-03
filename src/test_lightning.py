@@ -291,4 +291,6 @@ model = CaptchaModel(
     test_targets_orig=test_target_orig,
     lbl_encoder=lbl_encoder,
 )
-trainer.train(model, ckpt_path=model_chkpoint)
+trainer.test(model, ckpt_path=model_chkpoint)
+fin_res = model.return_final_output()
+print(fin_res)
